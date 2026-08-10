@@ -95,3 +95,26 @@ For the frontend, use the `REACT_APP_` prefix: `REACT_APP_API_URL=http://localho
 - **Monitoring**: Prometheus metrics (`/metrics` endpoint on each backend service)
 - **Routing**: HAProxy (local) / Kubernetes Ingress (production)
 - **Database**: MongoDB
+
+## Local Development
+
+To run the full stack locally:
+
+1. Start MongoDB:
+   docker run -d --name my-mongo -p 27017:27017 -v mongo-data:/data/db mongo:latest
+
+2. Copy .env.example to .env in each of backend/auth, backend/discounts,
+   backend/items, and client, filling in your own Cloudinary and JWT secret values.
+
+3. In separate terminals, run "npm install && npm start" in each of the three
+   backend service folders (ports 3001/3002/3003).
+
+4. Start HAProxy from the repo root: sudo haproxy -f haproxy.cfg
+
+5. In a fifth terminal, run "npm install && npm start" in client (port 3000).
+
+6. Visit http://localhost/ — HAProxy routes /api/auth, /api/discounts,
+   and /api/items to their respective services, and everything else to the
+   React frontend.
+
+Confirmed working end-to-end, including registration/login through the auth service.
