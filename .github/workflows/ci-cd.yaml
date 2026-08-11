@@ -1,0 +1,120 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER_NAME: restauranty-cluster-nazmul
+
+jobs:
+  # ── Build & test each backend component ──────────────────────
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth, discounts, items]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        working-directory: backend/${{ matrix.service }}
+        run: npm ci
+      - name: Run tests
+        working-directory: backend/${{ matrix.service }}
+        run: npm test --if-present
+
+  build-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+      - name: Build
+        working-directory: client
+        run: npm run build
+
+  # ── Build & push all 4 images, tagged with the commit SHA ────
+  docker:
+    needs: [build-test, build-test-frontend]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth, discounts, items]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: backend/${{ matrix.service }}
+          push: true
+          tags: |
+            nhcpde147/restauranty-${{ matrix.service }}:${{ github.sha }}
+            nhcpde147/restauranty-${{ matrix.service }}:latest
+
+  docker-frontend:
+    needs: [build-test, build-test-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: client
+          push: true
+          build-args: |
+            REACT_APP_SERVER_URL=https://restauranty.kelenva.com
+          tags: |
+            nhcpde147/restauranty-frontend:${{ github.sha }}
+            nhcpde147/restauranty-frontend:latest
+
+  # ── Deploy — gated behind manual approval via GitHub Environments ──
+  deploy:
+    needs: [docker, docker-frontend]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
+      - name: Apply manifests (in case any changed)
+        run: |
+          kubectl apply -f k8s/00-namespace.yaml
+          kubectl apply -f k8s/01-mongo.yaml
+          kubectl apply -f k8s/02-auth.yaml
+          kubectl apply -f k8s/03-discounts.yaml
+          kubectl apply -f k8s/04-items.yaml
+          kubectl apply -f k8s/05-frontend.yaml
+          kubectl apply -f k8s/07-ingress.yaml
+      - name: Roll out new images (tagged with this commit's SHA)
+        run: |
+          kubectl set image deployment/auth auth=nhcpde147/restauranty-auth:${{ github.sha }} -n restauranty
+          kubectl set image deployment/discounts discounts=nhcpde147/restauranty-discounts:${{ github.sha }} -n restauranty
+          kubectl set image deployment/items items=nhcpde147/restauranty-items:${{ github.sha }} -n restauranty
+          kubectl set image deployment/frontend frontend=nhcpde147/restauranty-frontend:${{ github.sha }} -n restauranty
+      - name: Wait for rollout to complete
+        run: |
+          kubectl rollout status deployment/auth -n restauranty
+          kubectl rollout status deployment/discounts -n restauranty
+          kubectl rollout status deployment/items -n restauranty
+          kubectl rollout status deployment/frontend -n restauranty

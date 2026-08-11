@@ -8,3 +8,8 @@ backend/*/.env
 backend/*/node_modules
 mobile/.expo
 k8s/06-secrets.yaml
+
+# Terraform local provider cache (not the lock file — that's tracked)
+terraform/.terraform/
+*.tfstate
+*.tfstate.backup
