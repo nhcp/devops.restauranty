@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: restauranty
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      containers:
+        - name: auth
+          image: nhcpde147/restauranty-auth:latest
+          ports:
+            - containerPort: 3001
+          env:
+            - name: PORT
+              value: "3001"
+            - name: MONGODB_URI
+              value: "mongodb://mongo:27017/Restauranty"
+            - name: CLOUD_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: restauranty-secrets
+                  key: CLOUD_NAME
+            - name: CLOUD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: restauranty-secrets
+                  key: CLOUD_API_KEY
+            - name: CLOUD_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: restauranty-secrets
+                  key: CLOUD_API_SECRET
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: restauranty
+spec:
+  selector:
+    app: auth
+  ports:
+    - port: 3001
+      targetPort: 3001

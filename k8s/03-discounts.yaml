@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discounts
+  namespace: restauranty
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: discounts
+  template:
+    metadata:
+      labels:
+        app: discounts
+    spec:
+      containers:
+        - name: discounts
+          image: nhcpde147/restauranty-discounts:latest
+          ports:
+            - containerPort: 3002
+          env:
+            - name: PORT
+              value: "3002"
+            - name: MONGODB_URI
+              value: "mongodb://mongo:27017/Restauranty"
+            - name: CLOUD_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: restauranty-secrets
+                  key: CLOUD_NAME
+            - name: CLOUD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: restauranty-secrets
+                  key: CLOUD_API_KEY
+            - name: CLOUD_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: restauranty-secrets
+                  key: CLOUD_API_SECRET
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: discounts
+  namespace: restauranty
+spec:
+  selector:
+    app: discounts
+  ports:
+    - port: 3002
+      targetPort: 3002
