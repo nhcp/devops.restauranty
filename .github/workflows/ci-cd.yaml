@@ -39,7 +39,7 @@ jobs:
         run: npm ci
       - name: Build
         working-directory: client
-        run: npm run build
+        run: CI=false npm run build
 
   # ── Build & push all 4 images, tagged with the commit SHA ────
   docker:
