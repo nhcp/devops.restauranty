@@ -49,9 +49,12 @@ kind: Service
 metadata:
   name: discounts
   namespace: restauranty
+  labels:
+    app: discounts
 spec:
   selector:
     app: discounts
   ports:
-    - port: 3002
+    - name: http
+      port: 3002
       targetPort: 3002
