@@ -104,4 +104,6 @@ jobs:
             cd /srv/restauranty
             docker compose pull
             docker compose up -d
+            sleep 10
             docker compose ps
+            curl -f http://localhost/api/auth || exit 1
