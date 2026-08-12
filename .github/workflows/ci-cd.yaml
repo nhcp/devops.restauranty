@@ -106,4 +106,4 @@ jobs:
             docker compose up -d
             sleep 10
             docker compose ps
-            curl -f http://localhost/api/auth || exit 1
+            curl -f -H "Host: restauranty.kelenva.com" http://localhost/api/auth || exit 1
