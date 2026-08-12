@@ -3,6 +3,11 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "client/**"
+      - "k8s/**"
+      - ".github/workflows/**"
 
 env:
   AWS_REGION: us-east-1
