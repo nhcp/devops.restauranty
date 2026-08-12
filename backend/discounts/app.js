@@ -14,7 +14,7 @@ const { httpMetricsMiddleware } = require('./metrics.cjs');
 const app = express();
 
 app.use(cors({
-    origin: '*'
+    origin: ['https://restauranty.kelenva.com', 'http://localhost', 'http://localhost:3000']
 }));
 app.use(httpMetricsMiddleware);
 
