@@ -9,3 +9,9 @@ variable "cluster_name" {
 variable "cluster_version" {
   default = "1.33"
 }
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  sensitive   = true
+}

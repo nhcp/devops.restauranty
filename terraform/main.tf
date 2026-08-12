@@ -49,3 +49,28 @@ module "eks" {
     }
   }
 }
+
+resource "aws_security_group_rule" "node_intra_all_tcp" {
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.eks.node_security_group_id
+  description               = "Allow all TCP between nodes (fixes pod-to-pod cross-node timeouts, e.g. port 80)"
+}
+
+resource "helm_release" "monitoring" {
+  name             = "monitoring"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "kube-prometheus-stack"
+  namespace        = "monitoring"
+  create_namespace = true
+
+  set = [
+    {
+      name  = "grafana.adminPassword"
+      value = var.grafana_admin_password
+    }
+  ]
+}
