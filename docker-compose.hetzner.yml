@@ -1,0 +1,108 @@
+services:
+  mongo:
+    image: mongo:6
+    container_name: restauranty-mongo
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - restauranty-internal
+    restart: unless-stopped
+
+  auth:
+    image: nhcpde147/restauranty-auth:latest
+    container_name: restauranty-auth
+    environment:
+      PORT: 3001
+      MONGODB_URI: mongodb://mongo:27017/Restauranty
+      SECRET: ${JWT_SECRET}
+      CLOUD_NAME: ${CLOUD_NAME}
+      CLOUD_API_KEY: ${CLOUD_API_KEY}
+      CLOUD_API_SECRET: ${CLOUD_API_SECRET}
+    networks:
+      - web
+      - restauranty-internal
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.restauranty-auth.rule=Host(`restauranty.kelenva.com`) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.restauranty-auth.entrypoints=websecure"
+      - "traefik.http.routers.restauranty-auth.tls=true"
+      - "traefik.http.routers.restauranty-auth.priority=10"
+      - "traefik.http.services.restauranty-auth.loadbalancer.server.port=3001"
+
+  discounts:
+    image: nhcpde147/restauranty-discounts:latest
+    container_name: restauranty-discounts
+    environment:
+      PORT: 3002
+      MONGODB_URI: mongodb://mongo:27017/Restauranty
+      SECRET: ${JWT_SECRET}
+      CLOUD_NAME: ${CLOUD_NAME}
+      CLOUD_API_KEY: ${CLOUD_API_KEY}
+      CLOUD_API_SECRET: ${CLOUD_API_SECRET}
+    networks:
+      - web
+      - restauranty-internal
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.restauranty-discounts.rule=Host(`restauranty.kelenva.com`) && PathPrefix(`/api/discounts`)"
+      - "traefik.http.routers.restauranty-discounts.entrypoints=websecure"
+      - "traefik.http.routers.restauranty-discounts.tls=true"
+      - "traefik.http.routers.restauranty-discounts.priority=10"
+      - "traefik.http.services.restauranty-discounts.loadbalancer.server.port=3002"
+
+  items:
+    image: nhcpde147/restauranty-items:latest
+    container_name: restauranty-items
+    environment:
+      PORT: 3003
+      MONGODB_URI: mongodb://mongo:27017/Restauranty
+      SECRET: ${JWT_SECRET}
+      CLOUD_NAME: ${CLOUD_NAME}
+      CLOUD_API_KEY: ${CLOUD_API_KEY}
+      CLOUD_API_SECRET: ${CLOUD_API_SECRET}
+    networks:
+      - web
+      - restauranty-internal
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.restauranty-items.rule=Host(`restauranty.kelenva.com`) && PathPrefix(`/api/items`)"
+      - "traefik.http.routers.restauranty-items.entrypoints=websecure"
+      - "traefik.http.routers.restauranty-items.tls=true"
+      - "traefik.http.routers.restauranty-items.priority=10"
+      - "traefik.http.services.restauranty-items.loadbalancer.server.port=3003"
+
+  frontend:
+    image: nhcpde147/restauranty-frontend:latest
+    container_name: restauranty-frontend
+    networks:
+      - web
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.restauranty-frontend.rule=Host(`restauranty.kelenva.com`)"
+      - "traefik.http.routers.restauranty-frontend.entrypoints=websecure"
+      - "traefik.http.routers.restauranty-frontend.tls=true"
+      - "traefik.http.routers.restauranty-frontend.priority=1"
+      - "traefik.http.services.restauranty-frontend.loadbalancer.server.port=80"
+
+networks:
+  web:
+    external: true
+  restauranty-internal:
+    driver: bridge
+
+volumes:
+  mongo-data:
