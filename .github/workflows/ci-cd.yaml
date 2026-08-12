@@ -104,6 +104,14 @@ jobs:
             cd /srv/restauranty
             docker compose pull
             docker compose up -d
-            sleep 10
             docker compose ps
-            curl -f -H "Host: restauranty.kelenva.com" http://localhost/api/auth || exit 1
+            for i in 1 2 3 4 5 6; do
+              if curl -sf -H "Host: restauranty.kelenva.com" http://localhost/api/auth > /dev/null; then
+                echo "Health check passed"
+                exit 0
+              fi
+              echo "Health check attempt $i failed, retrying in 5s..."
+              sleep 5
+            done
+            echo "Health check failed after all retries"
+            exit 1
