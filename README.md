@@ -1,120 +1,90 @@
 # Restauranty
 
-A restaurant management platform built with a **microservices architecture**: 3 Node.js/Express backends + a React frontend, unified behind HAProxy path-based routing.
+A food-ordering platform built as three independent Node.js microservices (auth, discounts, items) and a React frontend, deployed and operated as a real, working system rather than a single deployment exercise.
+
+Live demo: https://restauranty.kelenva.com
+Status page: https://status.kelenva.com/status/kelenva
+Monitoring: https://grafana.kelenva.com
+
+## What this project demonstrates
+
+Most student projects prove you can deploy an app once. This one covers the whole lifecycle: infrastructure as code, container orchestration, automated CI/CD with an approval gate, network security, observability, automated backups with a tested restore, and a permanent, self-hosted home for the app once the graded cloud deployment is retired. A separate add-on, Kubernetty, also covers operating a Kubernetes control plane from scratch rather than just consuming a managed one.
 
 ## Architecture
 
-```
-                         ┌────────────────────────┐
-                         │   HAProxy / Ingress    │
-    Browser ───────────► │       (port 80)        │
-                         └───────────┬────────────┘
-                                     │
-            ┌────────────────────────┼─────────────────────────┐
-            │                        │                         │
-       /api/auth/*             /api/items/*             /api/discounts/*
-            │                        │                         │
-   ┌────────▼────────┐     ┌─────────▼─────────┐    ┌─────────▼──────────┐
-   │  Auth Service   │     │  Items Service    │    │ Discounts Service  │
-   │   (port 3001)   │     │   (port 3003)     │    │   (port 3002)      │
-   └────────┬────────┘     └─────────┬─────────┘    └──────────┬─────────┘
-            │                        │                         │
-            └────────────────────────┼─────────────────────────┘
-                                     │
-                              ┌──────▼──────┐
-                              │   MongoDB   │
-                              │ (port 27017)│
-                              └─────────────┘
+```mermaid
+graph TD
+    User[Browser] -->|HTTPS| CF[Cloudflare]
+    CF --> LB[Traefik / Ingress]
+    LB --> FE[Frontend - React]
+    LB -->|/api/auth| Auth[auth service :3001]
+    LB -->|/api/discounts| Disc[discounts service :3002]
+    LB -->|/api/items| Items[items service :3003]
+    Auth --> Mongo[(MongoDB)]
+    Disc --> Mongo
+    Items --> Mongo
+    Auth -.->|/metrics| Prom[Prometheus]
+    Disc -.->|/metrics| Prom
+    Items -.->|/metrics| Prom
+    Prom --> Grafana[Grafana]
 ```
 
-## Microservices
+The frontend never talks to MongoDB directly, and the three backend services never talk to each other except through the routing layer. Auth issues JWTs; discounts and items validate them on incoming requests.
 
-| Service | Port | Path | Responsibilities |
-|---------|------|------|-----------------|
-| **Auth** | 3001 | `/api/auth/*` | User signup, login, JWT authentication |
-| **Discounts** | 3002 | `/api/discounts/*` | Coupon and campaign management |
-| **Items** | 3003 | `/api/items/*` | Menu items, dietary categories, orders |
-| **Frontend** | 3000 | `/` | React SPA (admin dashboard) |
+## Two live deployments
 
-## Quick Start
+This app runs in two genuinely separate places, on purpose.
 
-### 1. Start MongoDB
+AWS EKS is the cloud-native deliverable. The cluster and its networking were provisioned with Terraform, workloads deployed through Kubernetes manifests, TLS issued automatically by cert-manager and Let's Encrypt, traffic restricted with NetworkPolicies, and the whole thing monitored with Prometheus and Grafana provisioned through Terraform's Helm provider. This environment exists to prove the Kubernetes-specific skills the project is graded on, and it is not meant to run indefinitely — see the note at the end of this document.
 
-```bash
-docker run -d \
-  --name my-mongo \
-  -p 27017:27017 \
-  -v mongo-data:/data/db \
-  mongo:latest
-```
+Hetzner is the permanent home. It's a self-managed VPS running Docker Compose behind Traefik, with the same four containers, its own CI/CD pipeline, its own Prometheus and Grafana instance, daily automated database backups, and a public status page. This is where the app actually lives long term, since paying for a managed Kubernetes control plane indefinitely doesn't make sense for a project at this scale. Both deployments run from the exact same Docker images, published to Docker Hub.
 
-### 2. Start each microservice
+## Running it locally
 
-```bash
-# Terminal 1 - Auth
-cd backend/auth && npm install && npm start
+There are two ways to run this locally, matching how the project was actually built and debugged.
 
-# Terminal 2 - Discounts
-cd backend/discounts && npm install && npm start
+The first is plain local processes. Start MongoDB in Docker, then run each backend service and the client in its own terminal, with HAProxy in front using the provided config to route requests the same way the production Ingress does.
 
-# Terminal 3 - Items
-cd backend/items && npm install && npm start
+The second is Docker Compose, which reproduces the exact same setup entirely in containers — Mongo, all three backend services, the frontend, and HAProxy, wired together on one network. Bring the whole thing up with a single command and it behaves identically to running it by hand.
 
-# Terminal 4 - Frontend
-cd client && npm install && npm start
-```
+## CI/CD
 
-### 3. Start HAProxy
+The pipeline runs on every push that touches actual application code, the Kubernetes manifests, or the workflow file itself — not on documentation-only changes. It installs and tests each service, builds and tags Docker images with the commit hash, pushes them to Docker Hub, and then deploys, gated behind a manual approval step in GitHub before anything touches a live server. The deploy step connects to the Hetzner server over SSH, syncs the current compose configuration, pulls the new images, and runs a real health check against the live site before the run is allowed to succeed.
 
-```bash
-haproxy -f haproxy.cfg
-```
+The portfolio site at kelenva.com has its own separate pipeline, following the same pattern.
 
-Access the app at **http://localhost/**
+## Security
 
-## Environment Variables
+Secrets live in Kubernetes Secrets or environment files, never committed to git or baked into images. CORS is restricted to the real frontend origins rather than left open to any website. Two NetworkPolicies on EKS restrict which pods can reach which — this was verified with a live test rather than just assumed to work. TLS is real and renews automatically on both deployments. The EKS worker nodes carry only the standard minimal AWS-managed permissions, nothing broader. Full detail lives in SECURITY.md.
 
-Each microservice uses the same set of environment variables (see `.env.example` in each service folder):
+## Monitoring and backups
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `SECRET` | JWT signing key | `MySecret1!` |
-| `MONGODB_URI` | MongoDB connection string | `mongodb://127.0.0.1:27017/restauranty` |
-| `CLOUD_NAME` | Cloudinary cloud name | _(ask instructor)_ |
-| `CLOUD_API_KEY` | Cloudinary API key | _(ask instructor)_ |
-| `CLOUD_API_SECRET` | Cloudinary API secret | _(ask instructor)_ |
-| `PORT` | Service port | `3001` / `3002` / `3003` |
+Each backend service exposes Prometheus metrics — request counts by status code, user growth over time, and MongoDB connection status. Both deployments run their own Prometheus and Grafana. A public status page shows live uptime for the app, the portfolio site, and Grafana itself.
 
-For the frontend, use the `REACT_APP_` prefix: `REACT_APP_API_URL=http://localhost:80`
+MongoDB on Hetzner is backed up daily, and the restore path has actually been tested end to end, not just assumed to work because a backup file exists.
 
-## Tech Stack
+## Kubernetty
 
-- **Frontend**: React 18, React Router 6, Tailwind CSS, Axios, React Icons
-- **Backend**: Express, Mongoose, JWT (jsonwebtoken + express-jwt), bcryptjs
-- **Image Storage**: Cloudinary (via multer-storage-cloudinary)
-- **Monitoring**: Prometheus metrics (`/metrics` endpoint on each backend service)
-- **Routing**: HAProxy (local) / Kubernetes Ingress (production)
-- **Database**: MongoDB
+A separate, standalone exercise proving the other side of the same skill set — operating a Kubernetes control plane, not just deploying onto one. A small highly-available k3s cluster was built from raw EC2 instances: an nginx TCP load balancer in front of two k3s server nodes sharing an external MySQL datastore, with a worker node joined through the load balancer rather than directly to a server. The HA claim wasn't just asserted, it was tested — one control-plane node was stopped while a real workload was running, the cluster and the workload both kept working, and the node rejoined automatically once restarted, with no manual steps. This cluster is temporary and has nothing to do with Restauranty's actual deployment; it exists purely to demonstrate this second skill.
 
-## Local Development
+## What actually went wrong, and how it got fixed
 
-To run the full stack locally:
+These are left in on purpose rather than smoothed over, because working through them honestly is part of what this project is meant to show.
 
-1. Start MongoDB:
-   docker run -d --name my-mongo -p 27017:27017 -v mongo-data:/data/db mongo:latest
+A route in the items service was mounted without its leading slash, which meant requests wouldn't reliably reach it through the routing layer. Found and fixed early, during local development.
 
-2. Copy .env.example to .env in each of backend/auth, backend/discounts,
-   backend/items, and client, filling in your own Cloudinary and JWT secret values.
+Two separate AWS GuardDuty-managed resources — a security group and a VPC endpoint — silently blocked the EKS VPC from tearing down cleanly, on two different occasions, and had to be tracked down and removed manually since Terraform had no visibility into them.
 
-3. In separate terminals, run "npm install && npm start" in each of the three
-   backend service folders (ports 3001/3002/3003).
+The first version of the EKS cluster was built on a Kubernetes version that had already left AWS's standard support window, and the worker nodes failed to provision as a result. Fixing it meant destroying and rebuilding the cluster on a currently supported version, since EKS won't let you skip several minor versions in a single upgrade.
 
-4. Start HAProxy from the repo root: sudo haproxy -f haproxy.cfg
+A shared JWT signing secret was correctly wired into the auth service but missed on the other two, which caused auth to crash-loop while discounts and items quietly carried a broken authorization path that hadn't been exercised yet.
 
-5. In a fifth terminal, run "npm install && npm start" in client (port 3000).
+After a routine pod reschedule, traffic between nodes on port 80 started timing out. The node security group covered the ephemeral port range but had a real gap just below it. The fix was a rule allowing all TCP traffic between members of the node's own security group, and that fix was then written back into Terraform so it survives any future rebuild instead of only existing as a manual patch.
 
-6. Visit http://localhost/ — HAProxy routes /api/auth, /api/discounts,
-   and /api/items to their respective services, and everything else to the
-   React frontend.
+On the Hetzner side, Traefik couldn't reach the backend containers even though the routing rules and labels were correct. The containers were attached to two different Docker networks, and Traefik needs to be told explicitly which one to actually use when a container has more than one.
 
-Confirmed working end-to-end, including registration/login through the auth service.
+A post-deploy health check kept failing even after adding retries with backoff, which was itself the useful signal — a real timing problem would eventually succeed on a retry, and this one never did. The actual cause was that the check was using plain HTTP while the service's router only accepted HTTPS. Fixing the protocol, not the timing, resolved it cleanly on the very next attempt.
+
+## Retiring the EKS deployment
+
+The EKS cluster is deliberately temporary. Once the Kubernetes-specific work has been captured for grading, the plan is to run a full teardown, leaving the app running only on Hetzner — which is already serving live traffic on its own. Removing the AWS side at that point causes no downtime, since nothing on Hetzner depends on it.
