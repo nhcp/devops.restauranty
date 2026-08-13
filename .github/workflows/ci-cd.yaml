@@ -94,6 +94,23 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - uses: actions/checkout@v4
+      - name: Sync docker-compose.yml to Hetzner
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          source: "docker-compose.hetzner.yml"
+          target: "/srv/restauranty"
+          strip_components: 0
+      - name: Rename synced compose file
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: mv /srv/restauranty/docker-compose.hetzner.yml /srv/restauranty/docker-compose.yml
       - name: Deploy to Hetzner via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
