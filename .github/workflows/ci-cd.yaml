@@ -106,7 +106,7 @@ jobs:
             docker compose up -d
             docker compose ps
             for i in 1 2 3 4 5 6; do
-              if curl -sf -H "Host: restauranty.kelenva.com" http://localhost/api/auth > /dev/null; then
+              if curl -skf -H "Host: restauranty.kelenva.com" https://localhost/api/auth > /dev/null; then
                 echo "Health check passed"
                 exit 0
               fi
