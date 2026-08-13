@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'restauranty-auth'
+    static_configs:
+      - targets: ['restauranty-auth:3001']
+    metrics_path: /metrics
+
+  - job_name: 'restauranty-discounts'
+    static_configs:
+      - targets: ['restauranty-discounts:3002']
+    metrics_path: /metrics
+
+  - job_name: 'restauranty-items'
+    static_configs:
+      - targets: ['restauranty-items:3003']
+    metrics_path: /metrics
